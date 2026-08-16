@@ -249,6 +249,49 @@ configure_provider() {
 	hermes_exec hermes config check || warn "hermes config check reported issues (see above)."
 }
 
+configure_slack() {
+	step "Configuring Slack platform"
+
+	if [[ -z "$SLACK_BOT_TOKEN" ]]; then
+		ok "SLACK_BOT_TOKEN not set in .env; Slack stays unconfigured."
+		return 0
+	fi
+
+	if [[ -z "$SLACK_APP_TOKEN" || -z "$SLACK_ALLOWED_USERS" ]]; then
+		error "SLACK_BOT_TOKEN is set but SLACK_APP_TOKEN and/or SLACK_ALLOWED_USERS is missing in .env."
+		error "All three are required -- without SLACK_ALLOWED_USERS, Hermes denies every Slack message."
+		exit 1
+	fi
+
+	local hermes_env="${HERMES_DATA_DIR}/.env"
+	local current_bot_token current_allowed_users
+	current_bot_token="$(hermes_exec hermes config get SLACK_BOT_TOKEN 2>/dev/null || true)"
+	current_allowed_users="$(grep -E '^SLACK_ALLOWED_USERS=' "$hermes_env" 2>/dev/null | cut -d= -f2- || true)"
+
+	if [[ "$current_bot_token" == "$SLACK_BOT_TOKEN" && "$current_allowed_users" == "$SLACK_ALLOWED_USERS" ]]; then
+		ok "Slack already configured with the current tokens; skipping."
+		return 0
+	fi
+
+	# SLACK_BOT_TOKEN / SLACK_APP_TOKEN are recognized secret-shaped keys and
+	# route correctly to ~/.hermes/.env via `hermes config set`.
+	# SLACK_ALLOWED_USERS is not in Hermes's config schema -- `config set`
+	# would silently misfile it as a stray top-level config.yaml key instead
+	# (confirmed: produces a "not a recognized config key" warning), so it's
+	# written directly to the documented-correct location, ~/.hermes/.env.
+	hermes_exec hermes config set SLACK_BOT_TOKEN "$SLACK_BOT_TOKEN"
+	hermes_exec hermes config set SLACK_APP_TOKEN "$SLACK_APP_TOKEN"
+	upsert_env_var "$hermes_env" SLACK_ALLOWED_USERS "$SLACK_ALLOWED_USERS"
+	ok "Slack tokens configured."
+
+	info "Restarting gateway to pick up the new Slack platform..."
+	hermes_exec hermes gateway restart
+	if [[ "$API_SERVER_ENABLED" == "true" ]]; then
+		wait_for_port "$(api_server_probe_host)" "$API_SERVER_PORT" "gateway API server"
+	fi
+	ok "Gateway restarted."
+}
+
 print_summary() {
 	local provider base_url model
 	provider="$(hermes_exec hermes config get model.provider 2>/dev/null || echo unknown)"
@@ -281,6 +324,7 @@ main() {
 	validate_compose
 	start_containers
 	configure_provider
+	configure_slack
 	validate_compose
 
 	step "Running post-deployment health check"
