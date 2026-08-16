@@ -1,0 +1,10 @@
+# Worklog
+
+## 2026-08-15 23:44
+**Task:** Build a reproducible Docker Compose deployment of Hermes Agent (gateway + dashboard) wired to a native, host-run llama.cpp llama-server, with no cloud inference provider ever configured.
+
+**Decision:** Followed NousResearch/hermes-agent's own root `docker-compose.yml` architecture as closely as possible (two services, `network_mode: host`, `~/.hermes:/opt/data`, `HERMES_UID`/`HERMES_GID` defaulting to 10000) but swapped its `build: .` for the published `nousresearch/hermes-agent` image, pinned to `v2026.8.13` (exact tag, not `latest`/`main`, per repo image-pinning policy). Model provider is configured via Hermes's own `hermes config set model.{provider,base_url,default,api_key}` CLI (not hand-edited YAML), run inside the gateway container via `docker exec hermes`.
+
+**Why:** The repo's own compose file is the most authoritative source for "current official architecture" (more so than a docs-page example that showed a different single-container pattern). Using the official `hermes config` CLI avoids re-implementing YAML-merge/migration logic Hermes already owns, and backs up `config.yaml` automatically only when a change is actually about to happen (verified idempotent across 3+ `./deploy.sh` runs - no duplicate backups, no config churn).
+
+**Progress:** Deployed and verified end-to-end on this host: llama.cpp confirmed running with `--jinja` and `n_ctx=65536` (meets Hermes's hard 64K minimum for tool use), `deploy.sh`/`healthcheck.sh`/`status.sh`/`uninstall.sh` all pass `bash -n` + shellcheck clean, `docker compose config` validates, and `docker exec hermes hermes -z "Reply with exactly: HERMES_LLAMA_OK"` succeeded - proving the full Hermes -> llama.cpp -> model path, not just llama.cpp in isolation. `uninstall.sh --purge`'s typed-confirmation guard was verified to abort safely on a mismatched confirmation. No cloud provider API key is ever written to `~/.hermes/.env`; documented in README why that (plus `auxiliary.*` defaulting to the main/local model) is the actual guardrail against accidental cloud fallback, since Hermes's `fallback_providers` is opt-in and not touched by this deployment.

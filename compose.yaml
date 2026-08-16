@@ -1,0 +1,45 @@
+#
+# compose.yaml for Hermes Agent, configured against a llama.cpp llama-server
+# running natively on this host (127.0.0.1:8080).
+#
+# This mirrors NousResearch/hermes-agent's own docker-compose.yml (two
+# services, network_mode: host, ~/.hermes:/opt/data, HERMES_UID/HERMES_GID),
+# swapping the repo's `build: .` for the published, version-pinned
+# nousresearch/hermes-agent image.
+#
+# Usage: ./deploy.sh (sets HERMES_UID/HERMES_GID in .env automatically)
+#
+name: hermes
+
+services:
+  gateway:
+    image: ${HERMES_IMAGE:-nousresearch/hermes-agent}:${HERMES_IMAGE_TAG:-v2026.8.13}
+    container_name: hermes
+    restart: unless-stopped
+    # llama.cpp already listens on 127.0.0.1:8080 on this host; host
+    # networking lets the container reach it directly with no
+    # host.docker.internal / bridge / proxy indirection.
+    network_mode: host
+    volumes:
+      - ~/.hermes:/opt/data
+    environment:
+      - HERMES_UID=${HERMES_UID:-10000}
+      - HERMES_GID=${HERMES_GID:-10000}
+    command: ["gateway", "run"]
+
+  dashboard:
+    image: ${HERMES_IMAGE:-nousresearch/hermes-agent}:${HERMES_IMAGE_TAG:-v2026.8.13}
+    container_name: hermes-dashboard
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      - gateway
+    volumes:
+      - ~/.hermes:/opt/data
+    environment:
+      - HERMES_UID=${HERMES_UID:-10000}
+      - HERMES_GID=${HERMES_GID:-10000}
+    # --host 127.0.0.1: loopback-only bind. Because the bind is loopback,
+    # Hermes's dashboard auth gate does not engage (it only activates on
+    # non-loopback binds) -- see README Security notes before changing this.
+    command: ["dashboard", "--host", "${HERMES_DASHBOARD_HOST:-127.0.0.1}", "--no-open"]
