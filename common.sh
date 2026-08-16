@@ -61,6 +61,13 @@ load_env() {
 	SLACK_BOT_TOKEN="${SLACK_BOT_TOKEN:-}"
 	SLACK_APP_TOKEN="${SLACK_APP_TOKEN:-}"
 	SLACK_ALLOWED_USERS="${SLACK_ALLOWED_USERS:-}"
+	HERMES_BACKUP_DIR="${HERMES_BACKUP_DIR:-${HOME}/hermes-backups}"
+	HERMES_BACKUP_KEEP="${HERMES_BACKUP_KEEP:-14}"
+	HERMES_BACKUP_REMOTE="${HERMES_BACKUP_REMOTE:-}"
+	HERMES_BACKUP_NFS_MOUNT="${HERMES_BACKUP_NFS_MOUNT:-}"
+	ALERT_SMTP_FROM="${ALERT_SMTP_FROM:-}"
+	ALERT_SMTP_APP_PASSWORD="${ALERT_SMTP_APP_PASSWORD:-}"
+	ALERT_EMAIL_TO="${ALERT_EMAIL_TO:-}"
 	HERMES_DATA_DIR="${HOME}/.hermes"
 }
 
@@ -160,6 +167,58 @@ detect_context_size() {
 
 hermes_exec() {
 	docker exec hermes "$@"
+}
+
+# Sends a plaintext alert email via Gmail SMTP using curl's built-in SMTP
+# support (no MTA/mailutils needed). Requires ALERT_SMTP_FROM,
+# ALERT_SMTP_APP_PASSWORD (a Google App Password, not the account
+# password), and ALERT_EMAIL_TO to be set. Returns 1 (and warns) if any are
+# missing, so callers can decide whether that's fatal.
+send_alert_email() {
+	local subject="$1" body="$2"
+	if [[ -z "${ALERT_SMTP_FROM:-}" || -z "${ALERT_SMTP_APP_PASSWORD:-}" || -z "${ALERT_EMAIL_TO:-}" ]]; then
+		warn "Email alerting not configured (ALERT_SMTP_FROM / ALERT_SMTP_APP_PASSWORD / ALERT_EMAIL_TO) -- cannot send: $subject"
+		return 1
+	fi
+
+	local msg
+	msg="$(mktemp)"
+	{
+		printf 'From: Hermes Backup <%s>\n' "$ALERT_SMTP_FROM"
+		printf 'To: %s\n' "$ALERT_EMAIL_TO"
+		printf 'Subject: %s\n' "$subject"
+		printf 'Date: %s\n' "$(date -R)"
+		printf '\n'
+		printf '%s\n' "$body"
+	} >"$msg"
+
+	local rc=0
+	curl -s --url "smtps://smtp.gmail.com:465" --ssl-reqd \
+		--mail-from "$ALERT_SMTP_FROM" --mail-rcpt "$ALERT_EMAIL_TO" \
+		--user "${ALERT_SMTP_FROM}:${ALERT_SMTP_APP_PASSWORD}" \
+		--upload-file "$msg" || rc=$?
+	rm -f "$msg"
+	return "$rc"
+}
+
+# Verifies $1 is an actual mount point (mountpoint -q). Empty $1 = not
+# configured, treated as "nothing to check" (returns success). On failure,
+# sends an alert email if alerting is configured.
+verify_nfs_mount_or_alert() {
+	local mount_path="$1" context="$2"
+	[[ -z "$mount_path" ]] && return 0
+
+	if mountpoint -q "$mount_path" 2>/dev/null; then
+		return 0
+	fi
+
+	local msg
+	msg="Hermes backup ABORTED (${context}): expected mount '${mount_path}' is not mounted as of $(date -u +%FT%TZ). No backup was written -- it would otherwise have landed on local disk under the mount point, silently masquerading as an off-volume backup. Check the NFS mount (see /etc/fstab) and re-run once it's live."
+	error "$msg"
+	if send_alert_email "Hermes backup ALERT: NFS mount missing (${context})" "$msg"; then
+		info "Alert email sent to ${ALERT_EMAIL_TO:-<unconfigured>}."
+	fi
+	return 1
 }
 
 gateway_running() {

@@ -19,9 +19,15 @@ HERMES_BACKUP_REMOTE="${HERMES_BACKUP_REMOTE:-}"
 main() {
 	require_cmd tar
 	require_cmd find
+	require_cmd mountpoint
+	require_cmd curl
 
 	if [[ ! -d "$HERMES_DATA_DIR" ]]; then
 		error "${HERMES_DATA_DIR} does not exist -- nothing to back up."
+		exit 1
+	fi
+
+	if ! verify_nfs_mount_or_alert "$HERMES_BACKUP_NFS_MOUNT" "host backup.sh"; then
 		exit 1
 	fi
 

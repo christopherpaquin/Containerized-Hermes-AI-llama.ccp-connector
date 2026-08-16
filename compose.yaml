@@ -43,6 +43,16 @@ services:
       # a real off-volume backup. See README "Backups".
       - HERMES_CRON_BACKUP_DEST=${HERMES_CRON_BACKUP_DEST:-/opt/data/backups}
       - HERMES_CRON_BACKUP_KEEP=${HERMES_CRON_BACKUP_KEEP:-14}
+      # If set, backup-hermes-data.sh verifies this is an actual mount
+      # point before backing up (aborts + emails otherwise). Set to the
+      # container-internal path once an NFS volume is mounted above, e.g.
+      # /opt/backups -- matching the commented volume line, not the host path.
+      - HERMES_CRON_BACKUP_NFS_MOUNT=${HERMES_CRON_BACKUP_NFS_MOUNT:-}
+      # Alert email (Gmail SMTP via curl) for backup failures -- shared by
+      # both backup.sh (host) and backup-hermes-data.sh (this container).
+      - ALERT_SMTP_FROM=${ALERT_SMTP_FROM:-}
+      - ALERT_SMTP_APP_PASSWORD=${ALERT_SMTP_APP_PASSWORD:-}
+      - ALERT_EMAIL_TO=${ALERT_EMAIL_TO:-}
     command: ["gateway", "run"]
 
   dashboard:

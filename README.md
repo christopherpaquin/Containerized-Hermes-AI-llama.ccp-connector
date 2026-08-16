@@ -162,6 +162,35 @@ it on local disk or push it only to hosts you control.
 Run it manually before risky changes, or on a cron schedule
 (`crontab -e`: `0 3 * * * /path/to/backup.sh >> ~/hermes-backups/backup.log 2>&1`).
 
+### NFS mount verification + failure alerts
+
+Once `HERMES_BACKUP_DIR` (host) or `HERMES_CRON_BACKUP_DEST` (container,
+below) actually points at a path under an NFS mount, set the matching
+`HERMES_BACKUP_NFS_MOUNT` / `HERMES_CRON_BACKUP_NFS_MOUNT` to that mount's
+path (e.g. `/mnt/vol00` on the host, `/opt/backups` inside the container).
+Both scripts then verify it's an actual mount point (`mountpoint -q`)
+**before** backing up, and if it isn't, **abort without writing
+anything** and email an alert — rather than silently writing the backup
+to local disk underneath the unmounted mount point, which looks
+identical to a real off-volume backup until you actually need to restore
+from it and discover it never left this host.
+
+The alert email is sent via Gmail SMTP using `curl`'s built-in SMTP
+support (no mail server/MTA installed or required). Configure in `.env`:
+
+```
+ALERT_SMTP_FROM=<sending gmail address>
+ALERT_SMTP_APP_PASSWORD=<Google App Password, not the account password>
+ALERT_EMAIL_TO=<recipient address>
+```
+
+Generate an App Password at https://myaccount.google.com/apppasswords
+(requires 2-Step Verification enabled on that Google account first).
+
+Leaving `HERMES_BACKUP_NFS_MOUNT`/`HERMES_CRON_BACKUP_NFS_MOUNT` unset
+(the default) skips the mount check entirely — appropriate while the
+backup destination is still local disk, as it is by default today.
+
 ### Scheduling via Hermes's own cron instead of host crontab
 
 `hermes-cron-backup.sh` (this repo) is a second, container-native version
