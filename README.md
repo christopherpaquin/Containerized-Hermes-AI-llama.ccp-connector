@@ -178,6 +178,39 @@ model:
   api_key: none
 ```
 
+## Connecting CLI coding agents to Hermes (vs. straight to llama.cpp)
+
+Two different endpoints exist, for two different purposes -- don't point a
+coding CLI at both interchangeably without knowing which one you're getting:
+
+| Endpoint | What it talks to | Use it for |
+|---|---|---|
+| `http://127.0.0.1:8080/v1` | llama.cpp directly | Raw code completions -- the CLI's own tool-calling/file-editing logic drives everything. This is the default/recommended target for coding assistants. |
+| `http://<host-ip>:8642/v1` | The Hermes **agent** (gateway API server) | A client that should get Hermes's memory/skills/tool-loop in the response, not just a raw completion. Requests are agent turns, not bare chat completions -- expect different latency/behavior than talking to the model directly. |
+
+`<host-ip>` is this machine's LAN address (find it with `ip -4 addr show`
+if you don't already have it saved) -- the API server is bound to
+`0.0.0.0:8642` in this deployment, so it's reachable from other machines on
+your network, not just `127.0.0.1`.
+
+**To point a CLI client at Hermes instead of llama.cpp:**
+
+1. Get the key: `grep API_SERVER_KEY .env`
+2. Configure the client's OpenAI-compatible provider with:
+   - Base URL: `http://<host-ip>:8642/v1`
+   - API key: the `API_SERVER_KEY` value from step 1 (sent as `Authorization: Bearer <key>`)
+3. Switch back to `http://127.0.0.1:8080/v1` (no key needed) for plain
+   completions against the local model.
+
+Verify the server is up and enforcing auth at any time:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8642/v1/models          # 401, no key
+curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $(grep API_SERVER_KEY .env | cut -d= -f2)" http://127.0.0.1:8642/v1/models   # 200
+```
+
+`healthcheck.sh` runs both of these checks automatically on every deploy.
+
 ## Security notes
 
 - **Dashboard**: defaults to `127.0.0.1:9119` -- not the LAN. Access it
@@ -200,6 +233,15 @@ model:
   **not** return HTTP 200, i.e. that the auth gate is actually active, not
   just configured. Use a real password here -- this dashboard can execute
   shell/tool commands on the host.
+- **Gateway API server** (`API_SERVER_ENABLED=true`): same LAN-exposure
+  tradeoff as the dashboard, protected by `API_SERVER_KEY` (a generated
+  bearer token, not a password) rather than a login page. `deploy.sh`
+  auto-generates the key the first time the server is enabled and never
+  changes it on subsequent runs. `healthcheck.sh` confirms unauthenticated
+  requests get HTTP 401 and a correctly-authenticated request gets HTTP
+  200 on every deploy. Treat `API_SERVER_KEY` in `.env` like any other
+  credential -- it's gitignored, and anyone who has it can drive the full
+  Hermes agent (memory, skills, tool execution) from the network.
 - **Local-only inference guardrail**: this deployment never writes a cloud
   provider API key (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`,
   `OPENAI_API_KEY`, etc.) into `~/.hermes/.env`. Hermes's `auxiliary.*`

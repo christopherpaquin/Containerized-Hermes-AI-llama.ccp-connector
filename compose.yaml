@@ -20,11 +20,20 @@ services:
     # networking lets the container reach it directly with no
     # host.docker.internal / bridge / proxy indirection.
     network_mode: host
+    # Playwright/Chromium (browser automation tool) needs real shared memory
+    # or it crashes/degrades under the default 64MB /dev/shm.
+    shm_size: "1gb"
     volumes:
       - ~/.hermes:/opt/data
     environment:
       - HERMES_UID=${HERMES_UID:-10000}
       - HERMES_GID=${HERMES_GID:-10000}
+      # Gateway's own OpenAI-compatible API server (for external clients to
+      # talk to the Hermes *agent*, not a passthrough to the local model).
+      # Off unless API_SERVER_ENABLED=true. See README Security notes.
+      - API_SERVER_ENABLED=${API_SERVER_ENABLED:-false}
+      - API_SERVER_HOST=${API_SERVER_HOST:-127.0.0.1}
+      - API_SERVER_KEY=${API_SERVER_KEY:-}
     command: ["gateway", "run"]
 
   dashboard:

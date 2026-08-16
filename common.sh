@@ -54,6 +54,10 @@ load_env() {
 	HERMES_DASHBOARD_BASIC_AUTH_USERNAME="${HERMES_DASHBOARD_BASIC_AUTH_USERNAME:-}"
 	HERMES_DASHBOARD_BASIC_AUTH_PASSWORD="${HERMES_DASHBOARD_BASIC_AUTH_PASSWORD:-}"
 	HERMES_DASHBOARD_BASIC_AUTH_SECRET="${HERMES_DASHBOARD_BASIC_AUTH_SECRET:-}"
+	API_SERVER_ENABLED="${API_SERVER_ENABLED:-false}"
+	API_SERVER_HOST="${API_SERVER_HOST:-127.0.0.1}"
+	API_SERVER_PORT="${API_SERVER_PORT:-8642}"
+	API_SERVER_KEY="${API_SERVER_KEY:-}"
 	HERMES_DATA_DIR="${HOME}/.hermes"
 }
 
@@ -63,15 +67,19 @@ is_loopback_host() {
 	[[ "$h" == "127.0.0.1" || "$h" == "::1" || "$h" == "localhost" ]]
 }
 
-# Address to probe FROM this host for a dashboard bound to $HERMES_DASHBOARD_HOST.
+# Address to probe FROM this host for a service bound to the given host.
 # A 0.0.0.0 (or ::) wildcard bind is also reachable via loopback.
-dashboard_probe_host() {
-	if [[ "$HERMES_DASHBOARD_HOST" == "0.0.0.0" || "$HERMES_DASHBOARD_HOST" == "::" ]]; then
+probe_host_for() {
+	local h="$1"
+	if [[ "$h" == "0.0.0.0" || "$h" == "::" ]]; then
 		printf '127.0.0.1'
 	else
-		printf '%s' "$HERMES_DASHBOARD_HOST"
+		printf '%s' "$h"
 	fi
 }
+
+dashboard_probe_host() { probe_host_for "$HERMES_DASHBOARD_HOST"; }
+api_server_probe_host() { probe_host_for "$API_SERVER_HOST"; }
 
 # Idempotently set KEY=VALUE in a dotenv-style file, no duplicate keys.
 upsert_env_var() {

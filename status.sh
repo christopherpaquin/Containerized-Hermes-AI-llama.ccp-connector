@@ -49,6 +49,12 @@ main() {
 	status_line "Dashboard" "$dash_status"
 	status_line "Dashboard URL" "http://${HERMES_DASHBOARD_HOST}:${HERMES_DASHBOARD_PORT}"
 	status_line "Dashboard auth" "$auth_status"
+
+	local api_status="disabled"
+	if [[ "$API_SERVER_ENABLED" == "true" ]]; then
+		api_status="enabled -- http://${API_SERVER_HOST}:${API_SERVER_PORT}/v1"
+	fi
+	status_line "Gateway API server" "$api_status"
 	status_line "Image" "$image"
 	status_line "llama.cpp" "${llama_status} (${LLAMACPP_BASE_URL})"
 	if [[ -n "$ctx" ]]; then

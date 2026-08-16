@@ -64,6 +64,38 @@ check_dashboard_port() {
 	fi
 }
 
+check_api_server() {
+	if [[ "$API_SERVER_ENABLED" != "true" ]]; then
+		pass "Gateway API server is disabled (API_SERVER_ENABLED != true)"
+		return
+	fi
+
+	local probe_host
+	probe_host="$(api_server_probe_host)"
+	if ! tcp_reachable "$probe_host" "$API_SERVER_PORT" 3; then
+		fail "Gateway API server port ${API_SERVER_HOST}:${API_SERVER_PORT} is not accepting connections"
+		return
+	fi
+	pass "Gateway API server port ${API_SERVER_HOST}:${API_SERVER_PORT} is listening"
+
+	local code
+	code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://${probe_host}:${API_SERVER_PORT}/v1/models" || echo 000)"
+	if [[ "$code" == "401" || "$code" == "403" ]]; then
+		pass "Gateway API server rejects unauthenticated requests (HTTP ${code})"
+	else
+		fail "Gateway API server did not reject an unauthenticated request (HTTP ${code}, expected 401/403)"
+	fi
+
+	if [[ -n "$API_SERVER_KEY" ]]; then
+		code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 -H "Authorization: Bearer ${API_SERVER_KEY}" "http://${probe_host}:${API_SERVER_PORT}/v1/models" || echo 000)"
+		if [[ "$code" == "200" ]]; then
+			pass "Gateway API server accepts requests with a valid API_SERVER_KEY"
+		else
+			fail "Gateway API server rejected a request with a valid API_SERVER_KEY (HTTP ${code})"
+		fi
+	fi
+}
+
 check_hermes_config() {
 	if ! gateway_running; then
 		fail "Cannot verify Hermes configuration -- gateway container is not running"
@@ -139,6 +171,7 @@ main() {
 	check_containers
 	check_llamacpp
 	check_dashboard_port
+	check_api_server
 	check_hermes_config
 	check_no_cloud_keys
 	check_end_to_end

@@ -126,6 +126,30 @@ check_dashboard_auth() {
 	ok "Basic auth configured for dashboard user '${HERMES_DASHBOARD_BASIC_AUTH_USERNAME}'."
 }
 
+check_api_server() {
+	step "Checking gateway API server configuration"
+
+	if [[ "$API_SERVER_ENABLED" != "true" ]]; then
+		ok "API_SERVER_ENABLED is not 'true'; gateway API server stays off."
+		return 0
+	fi
+
+	if [[ -z "$API_SERVER_KEY" ]]; then
+		local key
+		key="$(openssl rand -hex 32)"
+		upsert_env_var "$ENV_FILE" API_SERVER_KEY "$key"
+		load_env
+		info "Generated API_SERVER_KEY."
+	fi
+
+	if is_loopback_host "$API_SERVER_HOST"; then
+		ok "API server will bind ${API_SERVER_HOST}:${API_SERVER_PORT} (loopback-only)."
+	else
+		warn "API server will bind ${API_SERVER_HOST}:${API_SERVER_PORT} (LAN-reachable)."
+		warn "Protected by API_SERVER_KEY as a bearer token -- keep it secret."
+	fi
+}
+
 ensure_data_dir() {
 	step "Preparing persistent data directory"
 	if [[ ! -d "$HERMES_DATA_DIR" ]]; then
@@ -150,25 +174,27 @@ start_containers() {
 	step "Starting Hermes gateway"
 	compose up -d gateway
 	wait_for_config_seed
+	if [[ "$API_SERVER_ENABLED" == "true" ]]; then
+		wait_for_port "$(api_server_probe_host)" "$API_SERVER_PORT" "gateway API server"
+	fi
 	ok "Gateway is running"
 
 	step "Starting Hermes dashboard"
 	compose up -d dashboard
-	wait_for_dashboard_port
+	wait_for_port "$(dashboard_probe_host)" "$HERMES_DASHBOARD_PORT" "dashboard"
 	ok "Dashboard is running"
 }
 
-wait_for_dashboard_port() {
-	local probe_host attempts=30
-	probe_host="$(dashboard_probe_host)"
+wait_for_port() {
+	local host="$1" port="$2" label="$3" attempts=30
 	while ((attempts > 0)); do
-		if tcp_reachable "$probe_host" "$HERMES_DASHBOARD_PORT" 1; then
+		if tcp_reachable "$host" "$port" 1; then
 			return 0
 		fi
 		attempts=$((attempts - 1))
 		sleep 1
 	done
-	error "Timed out waiting for the dashboard to listen on ${HERMES_DASHBOARD_HOST}:${HERMES_DASHBOARD_PORT}."
+	error "Timed out waiting for the ${label} to listen on ${host}:${port}."
 	exit 1
 }
 
@@ -232,6 +258,11 @@ print_summary() {
 	printf '\n'
 	printf 'Hermes Agent:       %s\n' "$(gateway_running && echo running || echo NOT RUNNING)"
 	printf 'Hermes Dashboard:   http://%s:%s\n' "$HERMES_DASHBOARD_HOST" "$HERMES_DASHBOARD_PORT"
+	if [[ "$API_SERVER_ENABLED" == "true" ]]; then
+		printf 'Gateway API server: http://%s:%s/v1 (API_SERVER_KEY set in .env)\n' "$API_SERVER_HOST" "$API_SERVER_PORT"
+	else
+		printf 'Gateway API server: disabled\n'
+	fi
 	printf 'Inference provider: %s\n' "$provider"
 	printf 'llama.cpp endpoint: %s\n' "$base_url"
 	printf 'Model:              %s\n' "$model"
@@ -245,6 +276,7 @@ main() {
 	check_llamacpp
 	ensure_local_env
 	check_dashboard_auth
+	check_api_server
 	ensure_data_dir
 	validate_compose
 	start_containers
