@@ -134,12 +134,29 @@ check_api_server() {
 		return 0
 	fi
 
-	if [[ -z "$API_SERVER_KEY" ]]; then
-		local key
-		key="$(openssl rand -hex 32)"
-		upsert_env_var "$ENV_FILE" API_SERVER_KEY "$key"
-		load_env
+	# Hermes reads API_SERVER_KEY from its own persisted ~/.hermes/.env in
+	# preference to the container's injected environment variable (observed:
+	# a value set only via compose's `environment:` was silently ignored
+	# once ~/.hermes/.env held a different one). Treat that file as the
+	# source of truth -- adopt its value if present, and always write
+	# whatever key we're using into it directly rather than relying on the
+	# env-var passthrough alone.
+	local hermes_env="${HERMES_DATA_DIR}/.env"
+	local existing_key
+	existing_key="$(grep -E '^API_SERVER_KEY=' "$hermes_env" 2>/dev/null | cut -d= -f2- || true)"
+
+	if [[ -n "$existing_key" && "$existing_key" != "$API_SERVER_KEY" ]]; then
+		info "Adopting the API_SERVER_KEY already persisted in ~/.hermes/.env."
+		API_SERVER_KEY="$existing_key"
+		upsert_env_var "$ENV_FILE" API_SERVER_KEY "$API_SERVER_KEY"
+	elif [[ -z "$API_SERVER_KEY" ]]; then
+		API_SERVER_KEY="$(openssl rand -hex 32)"
+		upsert_env_var "$ENV_FILE" API_SERVER_KEY "$API_SERVER_KEY"
 		info "Generated API_SERVER_KEY."
+	fi
+
+	if [[ -f "$hermes_env" ]]; then
+		upsert_env_var "$hermes_env" API_SERVER_KEY "$API_SERVER_KEY"
 	fi
 
 	if is_loopback_host "$API_SERVER_HOST"; then
@@ -148,6 +165,17 @@ check_api_server() {
 		warn "API server will bind ${API_SERVER_HOST}:${API_SERVER_PORT} (LAN-reachable)."
 		warn "Protected by API_SERVER_KEY as a bearer token -- keep it secret."
 	fi
+}
+
+sync_cron_backup_script() {
+	step "Installing the Hermes-cron backup script"
+	local dest="${HERMES_DATA_DIR}/scripts/backup-hermes-data.sh"
+	mkdir -p "$(dirname "$dest")"
+	cp "${SCRIPT_DIR}/hermes-cron-backup.sh" "$dest"
+	chmod +x "$dest"
+	ok "Installed to ~/.hermes/scripts/backup-hermes-data.sh (run inside the container by Hermes's own cron)"
+	info "Not scheduled automatically. Register it once ready with, e.g.:"
+	info "  docker exec hermes hermes cron create '0 3 * * *' --script backup-hermes-data.sh --no-agent --name hermes-backup"
 }
 
 ensure_data_dir() {
@@ -321,6 +349,7 @@ main() {
 	check_dashboard_auth
 	check_api_server
 	ensure_data_dir
+	sync_cron_backup_script
 	validate_compose
 	start_containers
 	configure_provider

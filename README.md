@@ -162,6 +162,36 @@ it on local disk or push it only to hosts you control.
 Run it manually before risky changes, or on a cron schedule
 (`crontab -e`: `0 3 * * * /path/to/backup.sh >> ~/hermes-backups/backup.log 2>&1`).
 
+### Scheduling via Hermes's own cron instead of host crontab
+
+`hermes-cron-backup.sh` (this repo) is a second, container-native version
+of the same idea, meant to be triggered by Hermes's **own** cron scheduler
+rather than the host's. `deploy.sh` installs it to
+`~/.hermes/scripts/backup-hermes-data.sh` on every run (Hermes's cron
+requires scripts to live under `~/.hermes/scripts/`) — it is not scheduled
+automatically. Register it once you're ready:
+
+```bash
+docker exec hermes hermes cron create '0 3 * * *' \
+  --script backup-hermes-data.sh --no-agent --name hermes-backup
+```
+
+`--no-agent` skips the LLM entirely (classic watchdog pattern — no tokens
+spent) and delivers the script's one-line stdout summary as the job's
+result. By default it writes to `/opt/data/backups` — the **same volume**
+as the data it's backing up, so it protects against accidental deletion or
+a bad config change, but not disk failure. Once an NFS share is mounted
+into the gateway container, point it there instead for a real off-volume
+backup:
+
+1. Mount the share in `compose.yaml` (a commented example is already in
+   the `gateway` service's `volumes:`), e.g.
+   `- /mnt/hermes-nfs-backup:/opt/backups`
+2. Set `HERMES_CRON_BACKUP_DEST=/opt/backups` in `.env`
+3. `./deploy.sh` to apply
+
+Manage the job with `docker exec hermes hermes cron {list,pause,resume,remove,runs} ...`.
+
 ## Uninstall
 
 ```bash

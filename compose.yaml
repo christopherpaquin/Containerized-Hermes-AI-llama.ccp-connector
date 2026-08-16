@@ -25,6 +25,9 @@ services:
     shm_size: "1gb"
     volumes:
       - ~/.hermes:/opt/data
+      # Once an NFS share exists, mount it here and point
+      # HERMES_CRON_BACKUP_DEST at this path for a real off-volume backup:
+      # - /mnt/hermes-nfs-backup:/opt/backups
     environment:
       - HERMES_UID=${HERMES_UID:-10000}
       - HERMES_GID=${HERMES_GID:-10000}
@@ -34,6 +37,12 @@ services:
       - API_SERVER_ENABLED=${API_SERVER_ENABLED:-false}
       - API_SERVER_HOST=${API_SERVER_HOST:-127.0.0.1}
       - API_SERVER_KEY=${API_SERVER_KEY:-}
+      # Read by ~/.hermes/scripts/backup-hermes-data.sh when triggered by
+      # Hermes's own cron. Defaults to a subdirectory of the same volume;
+      # point it at a mounted NFS share (add the matching volume below) for
+      # a real off-volume backup. See README "Backups".
+      - HERMES_CRON_BACKUP_DEST=${HERMES_CRON_BACKUP_DEST:-/opt/data/backups}
+      - HERMES_CRON_BACKUP_KEEP=${HERMES_CRON_BACKUP_KEEP:-14}
     command: ["gateway", "run"]
 
   dashboard:
