@@ -136,6 +136,32 @@ then:
 config-schema migrations against the mounted `config.yaml` on container
 start, backing it up first if a migration is needed.
 
+## Backups
+
+```bash
+./backup.sh
+```
+
+Archives `~/.hermes` (config, sessions, memories, skills, credentials) to
+a timestamped `tar.gz` under `~/hermes-backups` (configurable via
+`HERMES_BACKUP_DIR` in `.env`), excluding `home/.cache` and
+`lazy-packages/` (pure, regenerable caches — typically ~500MB of the
+directory's ~520MB, none of it real state). Keeps the newest
+`HERMES_BACKUP_KEEP` archives (default 14) and deletes older ones. Set
+`HERMES_BACKUP_REMOTE` (e.g. `user@host:/path`) to also `rsync` a copy to
+another host you control.
+
+**The archive contains real secrets** (Slack tokens, `API_SERVER_KEY`,
+the dashboard basic-auth secret, and any OAuth credentials) — it's created
+`600`/owner-only, and is **not suitable for git/GitHub, even a private
+repo**: private repos still carry exposure risk (a misconfigured
+visibility toggle, account compromise, caching/indexing that outlives a
+deleted repo) that a local or self-controlled remote backup doesn't. Keep
+it on local disk or push it only to hosts you control.
+
+Run it manually before risky changes, or on a cron schedule
+(`crontab -e`: `0 3 * * * /path/to/backup.sh >> ~/hermes-backups/backup.log 2>&1`).
+
 ## Uninstall
 
 ```bash
