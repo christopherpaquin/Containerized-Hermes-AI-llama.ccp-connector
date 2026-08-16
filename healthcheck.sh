@@ -42,11 +42,25 @@ check_llamacpp() {
 }
 
 check_dashboard_port() {
-	local host="$HERMES_DASHBOARD_HOST" port="$HERMES_DASHBOARD_PORT"
-	if tcp_reachable "$host" "$port" 3; then
-		pass "Dashboard port ${host}:${port} is listening"
+	local probe_host port="$HERMES_DASHBOARD_PORT"
+	probe_host="$(dashboard_probe_host)"
+	if tcp_reachable "$probe_host" "$port" 3; then
+		pass "Dashboard port ${HERMES_DASHBOARD_HOST}:${port} is listening"
 	else
-		fail "Dashboard port ${host}:${port} is not accepting connections"
+		fail "Dashboard port ${HERMES_DASHBOARD_HOST}:${port} is not accepting connections"
+		return
+	fi
+
+	if is_loopback_host "$HERMES_DASHBOARD_HOST"; then
+		return
+	fi
+
+	local code
+	code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "http://${probe_host}:${port}/" || echo 000)"
+	if [[ "$code" == "200" ]]; then
+		fail "Dashboard served HTTP 200 with NO credentials on a non-loopback bind -- auth gate is not active!"
+	else
+		pass "Dashboard requires authentication on its non-loopback bind (unauthenticated request -> HTTP ${code})"
 	fi
 }
 

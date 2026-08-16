@@ -51,7 +51,26 @@ load_env() {
 	HERMES_MODEL="${HERMES_MODEL:-}"
 	HERMES_DASHBOARD_HOST="${HERMES_DASHBOARD_HOST:-127.0.0.1}"
 	HERMES_DASHBOARD_PORT="${HERMES_DASHBOARD_PORT:-9119}"
+	HERMES_DASHBOARD_BASIC_AUTH_USERNAME="${HERMES_DASHBOARD_BASIC_AUTH_USERNAME:-}"
+	HERMES_DASHBOARD_BASIC_AUTH_PASSWORD="${HERMES_DASHBOARD_BASIC_AUTH_PASSWORD:-}"
+	HERMES_DASHBOARD_BASIC_AUTH_SECRET="${HERMES_DASHBOARD_BASIC_AUTH_SECRET:-}"
 	HERMES_DATA_DIR="${HOME}/.hermes"
+}
+
+# True (exit 0) when the given bind address is loopback-only.
+is_loopback_host() {
+	local h="$1"
+	[[ "$h" == "127.0.0.1" || "$h" == "::1" || "$h" == "localhost" ]]
+}
+
+# Address to probe FROM this host for a dashboard bound to $HERMES_DASHBOARD_HOST.
+# A 0.0.0.0 (or ::) wildcard bind is also reachable via loopback.
+dashboard_probe_host() {
+	if [[ "$HERMES_DASHBOARD_HOST" == "0.0.0.0" || "$HERMES_DASHBOARD_HOST" == "::" ]]; then
+		printf '127.0.0.1'
+	else
+		printf '%s' "$HERMES_DASHBOARD_HOST"
+	fi
 }
 
 # Idempotently set KEY=VALUE in a dotenv-style file, no duplicate keys.

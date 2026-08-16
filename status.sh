@@ -35,10 +35,20 @@ main() {
 		model="$(hermes_exec hermes config get model.default 2>/dev/null || echo 'n/a')"
 	fi
 
+	local auth_status="not required (loopback bind)"
+	if ! is_loopback_host "$HERMES_DASHBOARD_HOST"; then
+		if [[ -n "$HERMES_DASHBOARD_BASIC_AUTH_USERNAME" ]]; then
+			auth_status="basic auth (user '${HERMES_DASHBOARD_BASIC_AUTH_USERNAME}')"
+		else
+			auth_status="NOT CONFIGURED -- non-loopback bind with no provider"
+		fi
+	fi
+
 	printf '%sHermes Agent status%s\n\n' "$BOLD" "$NC"
 	status_line "Gateway" "$gw_status"
 	status_line "Dashboard" "$dash_status"
 	status_line "Dashboard URL" "http://${HERMES_DASHBOARD_HOST}:${HERMES_DASHBOARD_PORT}"
+	status_line "Dashboard auth" "$auth_status"
 	status_line "Image" "$image"
 	status_line "llama.cpp" "${llama_status} (${LLAMACPP_BASE_URL})"
 	if [[ -n "$ctx" ]]; then

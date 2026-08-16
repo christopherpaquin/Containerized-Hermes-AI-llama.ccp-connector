@@ -39,7 +39,10 @@ services:
     environment:
       - HERMES_UID=${HERMES_UID:-10000}
       - HERMES_GID=${HERMES_GID:-10000}
-    # --host 127.0.0.1: loopback-only bind. Because the bind is loopback,
-    # Hermes's dashboard auth gate does not engage (it only activates on
-    # non-loopback binds) -- see README Security notes before changing this.
+      # Only used when HERMES_DASHBOARD_HOST is non-loopback. Hermes's
+      # dashboard auth gate engages automatically on any non-loopback bind
+      # and refuses to start without a provider -- see README Security notes.
+      - HERMES_DASHBOARD_BASIC_AUTH_USERNAME=${HERMES_DASHBOARD_BASIC_AUTH_USERNAME:-}
+      - HERMES_DASHBOARD_BASIC_AUTH_PASSWORD=${HERMES_DASHBOARD_BASIC_AUTH_PASSWORD:-}
+      - HERMES_DASHBOARD_BASIC_AUTH_SECRET=${HERMES_DASHBOARD_BASIC_AUTH_SECRET:-}
     command: ["dashboard", "--host", "${HERMES_DASHBOARD_HOST:-127.0.0.1}", "--no-open"]

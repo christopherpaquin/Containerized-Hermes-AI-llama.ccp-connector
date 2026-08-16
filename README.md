@@ -180,17 +180,26 @@ model:
 
 ## Security notes
 
-- **Dashboard**: bound to `127.0.0.1:9119` only, not the LAN. Access it
+- **Dashboard**: defaults to `127.0.0.1:9119` -- not the LAN. Access it
   locally at `http://127.0.0.1:9119`, or remotely over SSH port forwarding:
   ```bash
   ssh -L 9119:127.0.0.1:9119 user@host
   ```
-  Because the bind is loopback, Hermes's dashboard auth gate does not
-  engage (it only activates on non-loopback binds). Do **not** change
-  `HERMES_DASHBOARD_HOST` to `0.0.0.0` without first configuring a
-  `dashboard_auth` provider (basic auth, OIDC, or Nous Portal OAuth) --
-  Hermes will refuse to serve an unauthenticated non-loopback dashboard,
-  but don't rely on that as your only safeguard.
+  Because that bind is loopback, Hermes's dashboard auth gate does not
+  engage (it only activates on non-loopback binds).
+
+  **LAN exposure (`HERMES_DASHBOARD_HOST=0.0.0.0`)**: supported, but only
+  with an auth provider configured -- Hermes hard-fails at startup
+  otherwise. Set `HERMES_DASHBOARD_BASIC_AUTH_USERNAME` and
+  `HERMES_DASHBOARD_BASIC_AUTH_PASSWORD` in `.env` (gitignored, never
+  committed); `deploy.sh` refuses to proceed with a non-loopback bind
+  until both are set, and auto-generates
+  `HERMES_DASHBOARD_BASIC_AUTH_SECRET` the first time it's needed so
+  sessions survive container restarts. `healthcheck.sh` additionally
+  verifies an unauthenticated request against a non-loopback bind does
+  **not** return HTTP 200, i.e. that the auth gate is actually active, not
+  just configured. Use a real password here -- this dashboard can execute
+  shell/tool commands on the host.
 - **Local-only inference guardrail**: this deployment never writes a cloud
   provider API key (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`,
   `OPENAI_API_KEY`, etc.) into `~/.hermes/.env`. Hermes's `auxiliary.*`

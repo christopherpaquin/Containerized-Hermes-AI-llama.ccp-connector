@@ -19,6 +19,7 @@ check_prereqs() {
 	require_cmd jq
 	require_cmd sed
 	require_cmd id
+	require_cmd openssl
 
 	if ! docker compose version >/dev/null 2>&1; then
 		error "'docker compose' is not available. Install the Docker Compose plugin."
@@ -97,6 +98,34 @@ ensure_local_env() {
 	load_env
 }
 
+check_dashboard_auth() {
+	step "Checking dashboard bind/auth configuration"
+
+	if is_loopback_host "$HERMES_DASHBOARD_HOST"; then
+		ok "Dashboard bind ${HERMES_DASHBOARD_HOST} is loopback-only; no auth provider required."
+		return 0
+	fi
+
+	warn "Dashboard is configured to bind to ${HERMES_DASHBOARD_HOST} (non-loopback / LAN-reachable)."
+	warn "Hermes refuses to serve a non-loopback dashboard without an auth provider."
+
+	if [[ -z "$HERMES_DASHBOARD_BASIC_AUTH_USERNAME" || -z "$HERMES_DASHBOARD_BASIC_AUTH_PASSWORD" ]]; then
+		error "Set HERMES_DASHBOARD_BASIC_AUTH_USERNAME and HERMES_DASHBOARD_BASIC_AUTH_PASSWORD in .env"
+		error "before binding the dashboard to a non-loopback address."
+		exit 1
+	fi
+
+	if [[ -z "$HERMES_DASHBOARD_BASIC_AUTH_SECRET" ]]; then
+		local secret
+		secret="$(openssl rand -hex 32)"
+		upsert_env_var "$ENV_FILE" HERMES_DASHBOARD_BASIC_AUTH_SECRET "$secret"
+		load_env
+		info "Generated HERMES_DASHBOARD_BASIC_AUTH_SECRET (keeps dashboard sessions stable across restarts)."
+	fi
+
+	ok "Basic auth configured for dashboard user '${HERMES_DASHBOARD_BASIC_AUTH_USERNAME}'."
+}
+
 ensure_data_dir() {
 	step "Preparing persistent data directory"
 	if [[ ! -d "$HERMES_DATA_DIR" ]]; then
@@ -130,9 +159,10 @@ start_containers() {
 }
 
 wait_for_dashboard_port() {
-	local attempts=30
+	local probe_host attempts=30
+	probe_host="$(dashboard_probe_host)"
 	while ((attempts > 0)); do
-		if tcp_reachable "$HERMES_DASHBOARD_HOST" "$HERMES_DASHBOARD_PORT" 1; then
+		if tcp_reachable "$probe_host" "$HERMES_DASHBOARD_PORT" 1; then
 			return 0
 		fi
 		attempts=$((attempts - 1))
@@ -214,6 +244,7 @@ main() {
 	check_prereqs
 	check_llamacpp
 	ensure_local_env
+	check_dashboard_auth
 	ensure_data_dir
 	validate_compose
 	start_containers
