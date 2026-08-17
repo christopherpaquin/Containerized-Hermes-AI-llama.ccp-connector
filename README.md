@@ -197,13 +197,21 @@ backup destination is still local disk, as it is by default today.
 of the same idea, meant to be triggered by Hermes's **own** cron scheduler
 rather than the host's. `deploy.sh` installs it to
 `~/.hermes/scripts/backup-hermes-data.sh` on every run (Hermes's cron
-requires scripts to live under `~/.hermes/scripts/`) — it is not scheduled
-automatically. Register it once you're ready:
+requires scripts to live under `~/.hermes/scripts/`) — `deploy.sh` does
+not register the schedule itself. Currently registered, weekly (Sundays
+03:00 UTC), writing to local disk (`/opt/data/backups`) until the NFS
+mount is ready:
 
 ```bash
-docker exec hermes hermes cron create '0 3 * * *' \
+docker exec hermes hermes cron create '0 3 * * 0' \
   --script backup-hermes-data.sh --no-agent --name hermes-backup
 ```
+
+Manage it: `docker exec hermes hermes cron {list,pause,resume,remove,runs} hermes-backup`.
+Note the job's schedule/destination live in Hermes's own state
+(`~/.hermes/cron/`), not in this repo — redeploying doesn't re-register
+or change it; edit with `hermes cron edit` if you want a different
+cadence.
 
 `--no-agent` skips the LLM entirely (classic watchdog pattern — no tokens
 spent) and delivers the script's one-line stdout summary as the job's
@@ -217,9 +225,10 @@ backup:
    the `gateway` service's `volumes:`), e.g.
    `- /mnt/hermes-nfs-backup:/opt/backups`
 2. Set `HERMES_CRON_BACKUP_DEST=/opt/backups` in `.env`
-3. `./deploy.sh` to apply
-
-Manage the job with `docker exec hermes hermes cron {list,pause,resume,remove,runs} ...`.
+3. Also set `HERMES_CRON_BACKUP_NFS_MOUNT=/opt/backups` (see "NFS mount
+   verification" above) so a dropped mount fails loudly instead of
+   silently falling back to local disk
+4. `./deploy.sh` to apply
 
 ## Uninstall
 
