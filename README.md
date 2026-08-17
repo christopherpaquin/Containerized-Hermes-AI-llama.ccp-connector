@@ -120,6 +120,13 @@ already exists and is managed independently.
   ```
   A non-empty `chat_template` confirms `--jinja` is active.
 
+  Note: `llama-server` typically binds `0.0.0.0`, so it's also directly
+  reachable from other machines on your LAN at `http://10.1.10.x:8080/v1`
+  (`10.1.10.x` standing in for this host's actual LAN address throughout
+  this README). This deployment doesn't use that path — Hermes always
+  reaches it via `127.0.0.1` on the same host — but it's useful for
+  testing the model directly from another machine.
+
 ---
 
 ## 🚀 Installation
@@ -158,10 +165,11 @@ most powerful:
 
 ### 1. Web dashboard
 
-Open `http://127.0.0.1:9119` (or wherever `HERMES_DASHBOARD_HOST` points —
-see [Security notes](#-security-notes) before exposing it beyond
-localhost) and log in. Gives you chat, sessions, memory, skills, and cron
-job views.
+Open `http://127.0.0.1:9119` locally, or `http://10.1.10.x:9119` (this
+host's LAN address) if `HERMES_DASHBOARD_HOST=0.0.0.0` — see
+[Security notes](#-security-notes) before exposing it beyond localhost.
+Log in with the dashboard's configured auth. Gives you chat, sessions,
+memory, skills, and cron job views.
 
 ### 2. Interactive CLI, inside the container
 
@@ -198,18 +206,18 @@ coding CLI at both interchangeably without knowing which one you're getting:
 | Endpoint | What it talks to | Use it for |
 |---|---|---|
 | `http://127.0.0.1:8080/v1` | llama.cpp directly | Raw code completions — the CLI's own tool-calling/file-editing logic drives everything. This is the default/recommended target for coding assistants. |
-| `http://<host-ip>:8642/v1` | The Hermes **agent** (gateway API server) | A client that should get Hermes's memory/skills/tool-loop in the response, not just a raw completion. Requests are agent turns, not bare chat completions — expect different latency/behavior than talking to the model directly. |
+| `http://10.1.10.x:8642/v1` | The Hermes **agent** (gateway API server) | A client that should get Hermes's memory/skills/tool-loop in the response, not just a raw completion. Requests are agent turns, not bare chat completions — expect different latency/behavior than talking to the model directly. |
 
-`<host-ip>` is this machine's LAN address (find it with `ip -4 addr show`
-if you don't already have it saved) — the API server is bound to
-`0.0.0.0:8642` in this deployment, so it's reachable from other machines on
-your network, not just `127.0.0.1`.
+`10.1.10.x` stands in for this machine's actual LAN address throughout
+this README (find it with `ip -4 addr show` if you don't already have it
+saved) — the API server is bound to `0.0.0.0:8642` in this deployment, so
+it's reachable from other machines on your network, not just `127.0.0.1`.
 
 **To point a CLI client at Hermes instead of llama.cpp:**
 
 1. Get the key: `grep API_SERVER_KEY .env`
 2. Configure the client's OpenAI-compatible provider with:
-   - Base URL: `http://<host-ip>:8642/v1`
+   - Base URL: `http://10.1.10.x:8642/v1`
    - API key: the `API_SERVER_KEY` value from step 1 (sent as `Authorization: Bearer <key>`)
 3. Switch back to `http://127.0.0.1:8080/v1` (no key needed) for plain
    completions against the local model.
@@ -324,13 +332,20 @@ start, backing it up first if a migration is needed.
 ```
 
 Archives `~/.hermes` (config, sessions, memories, skills, credentials) to
-a timestamped `tar.gz` under `~/hermes-backups` (configurable via
-`HERMES_BACKUP_DIR` in `.env`), excluding `home/.cache` and
-`lazy-packages/` (pure, regenerable caches — typically ~500MB of the
-directory's ~520MB, none of it real state). Keeps the newest
-`HERMES_BACKUP_KEEP` archives (default 14) and deletes older ones. Set
-`HERMES_BACKUP_REMOTE` (e.g. `user@host:/path`) to also `rsync` a copy to
-another host you control.
+a timestamped `tar.gz` under `HERMES_BACKUP_DIR` (`.env`), excluding
+`home/.cache` and `lazy-packages/` (pure, regenerable caches — typically
+~500MB of the directory's ~520MB, none of it real state). Keeps the
+newest `HERMES_BACKUP_KEEP` archives (default 14) and deletes older ones.
+Set `HERMES_BACKUP_REMOTE` (e.g. `user@host:/path`) to also `rsync` a
+copy to another host you control.
+
+Currently configured to write to `/mnt/vol00/hermes-backups`, an NFS
+share (`raptor.lab:/vol00`) rather than local disk — a genuine off-volume
+backup. That directory had to be created and `chown`ed to a non-root UID
+on the NFS server (raptor.lab) first: the export enforces the standard
+`root_squash` behavior, so even `sudo` on this client has no real
+authority over it — only a matching non-root UID/GID, set server-side,
+can write.
 
 ⚠️ **The archive contains real secrets** (Slack tokens, `API_SERVER_KEY`,
 the dashboard basic-auth secret, and any OAuth credentials) — it's created
@@ -447,9 +462,9 @@ from `id -u`/`id -g` on every run.
   Because that bind is loopback, Hermes's dashboard auth gate does not
   engage (it only activates on non-loopback binds).
 
-  **LAN exposure (`HERMES_DASHBOARD_HOST=0.0.0.0`)**: supported, but only
-  with an auth provider configured — Hermes hard-fails at startup
-  otherwise. Set `HERMES_DASHBOARD_BASIC_AUTH_USERNAME` and
+  **LAN exposure (`HERMES_DASHBOARD_HOST=0.0.0.0`)**: supported (reachable
+  at `http://10.1.10.x:9119`), but only with an auth provider configured —
+  Hermes hard-fails at startup otherwise. Set `HERMES_DASHBOARD_BASIC_AUTH_USERNAME` and
   `HERMES_DASHBOARD_BASIC_AUTH_PASSWORD` in `.env` (gitignored, never
   committed); `deploy.sh` refuses to proceed with a non-loopback bind
   until both are set, and auto-generates
