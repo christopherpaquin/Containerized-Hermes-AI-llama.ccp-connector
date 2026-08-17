@@ -25,9 +25,12 @@ services:
     shm_size: "1gb"
     volumes:
       - ~/.hermes:/opt/data
-      # Once an NFS share exists, mount it here and point
-      # HERMES_CRON_BACKUP_DEST at this path for a real off-volume backup:
-      # - /mnt/hermes-nfs-backup:/opt/backups
+      # NFS share (raptor.lab:/vol00, mounted on the host at /mnt/vol00) for
+      # a real off-volume backup destination -- see README "Backups". The
+      # host subdirectory is chown'ed to this deployment's HERMES_UID/GID on
+      # the NFS server itself (root_squash means client-side sudo has no
+      # authority over it); mount the same subdirectory backup.sh uses.
+      - /mnt/vol00/hermes-backups:/opt/backups
     environment:
       - HERMES_UID=${HERMES_UID:-10000}
       - HERMES_GID=${HERMES_GID:-10000}
@@ -38,15 +41,13 @@ services:
       - API_SERVER_HOST=${API_SERVER_HOST:-127.0.0.1}
       - API_SERVER_KEY=${API_SERVER_KEY:-}
       # Read by ~/.hermes/scripts/backup-hermes-data.sh when triggered by
-      # Hermes's own cron. Defaults to a subdirectory of the same volume;
-      # point it at a mounted NFS share (add the matching volume below) for
-      # a real off-volume backup. See README "Backups".
+      # Hermes's own cron. Set to the NFS mount above for a real off-volume
+      # backup. See README "Backups".
       - HERMES_CRON_BACKUP_DEST=${HERMES_CRON_BACKUP_DEST:-/opt/data/backups}
       - HERMES_CRON_BACKUP_KEEP=${HERMES_CRON_BACKUP_KEEP:-14}
       # If set, backup-hermes-data.sh verifies this is an actual mount
-      # point before backing up (aborts + emails otherwise). Set to the
-      # container-internal path once an NFS volume is mounted above, e.g.
-      # /opt/backups -- matching the commented volume line, not the host path.
+      # point before backing up (aborts + emails otherwise) -- matches the
+      # /opt/backups volume mount above, not the host-side path.
       - HERMES_CRON_BACKUP_NFS_MOUNT=${HERMES_CRON_BACKUP_NFS_MOUNT:-}
       # Alert email (Gmail SMTP via curl) for backup failures -- shared by
       # both backup.sh (host) and backup-hermes-data.sh (this container).

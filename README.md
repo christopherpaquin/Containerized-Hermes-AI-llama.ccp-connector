@@ -395,8 +395,7 @@ rather than the host's. `deploy.sh` installs it to
 `~/.hermes/scripts/backup-hermes-data.sh` on every run (Hermes's cron
 requires scripts to live under `~/.hermes/scripts/`) — `deploy.sh` does
 not register the schedule itself. Currently registered, weekly (Sundays
-03:00 UTC), writing to local disk (`/opt/data/backups`) until the NFS
-mount is ready:
+03:00 UTC):
 
 ```bash
 docker exec hermes hermes cron create '0 3 * * 0' \
@@ -404,27 +403,32 @@ docker exec hermes hermes cron create '0 3 * * 0' \
 ```
 
 Manage it: `docker exec hermes hermes cron {list,pause,resume,remove,runs} hermes-backup`.
-Note the job's schedule/destination live in Hermes's own state
-(`~/.hermes/cron/`), not in this repo — redeploying doesn't re-register
-or change it; edit with `hermes cron edit` if you want a different
-cadence.
+Note the job's schedule lives in Hermes's own state (`~/.hermes/cron/`),
+not in this repo — redeploying doesn't re-register or change it; edit
+with `hermes cron edit` if you want a different cadence.
 
 `--no-agent` skips the LLM entirely (classic watchdog pattern — no tokens
 spent) and delivers the script's one-line stdout summary as the job's
-result. By default it writes to `/opt/data/backups` — the **same volume**
-as the data it's backing up, so it protects against accidental deletion or
-a bad config change, but not disk failure. Once an NFS share is mounted
-into the gateway container, point it there instead for a real off-volume
-backup:
+result. It writes to `HERMES_CRON_BACKUP_DEST` (currently `/opt/backups`,
+bind-mounted in `compose.yaml` from `/mnt/vol00/hermes-backups` — the same
+NFS share `backup.sh` uses on the host, so this is a genuine off-volume
+backup, not the same-volume fallback). `HERMES_CRON_BACKUP_NFS_MOUNT` is
+set to the same path so a dropped mount aborts and emails an alert instead
+of silently falling back to the container's own `/opt/data`.
 
-1. Mount the share in `compose.yaml` (a commented example is already in
-   the `gateway` service's `volumes:`), e.g.
-   `- /mnt/hermes-nfs-backup:/opt/backups`
-2. Set `HERMES_CRON_BACKUP_DEST=/opt/backups` in `.env`
-3. Also set `HERMES_CRON_BACKUP_NFS_MOUNT=/opt/backups` (see "NFS mount
-   verification" above) so a dropped mount fails loudly instead of
-   silently falling back to local disk
-4. `./deploy.sh` to apply
+⚠️ **Test as the `hermes` user, not raw `docker exec`.** `docker exec
+hermes <cmd>` runs as container **root** by default, and NFS's
+`root_squash` maps root to an unprivileged account with no rights over the
+`700` backup directory — a manual test as root fails with `chmod:
+Operation not permitted` even though the real cron-triggered run (which
+executes as the `hermes` user, UID matching the NFS chown) works fine. Use
+`docker exec -u hermes hermes bash /opt/data/scripts/backup-hermes-data.sh`
+to test manually.
+
+To point this at local disk instead (e.g. before an NFS share exists):
+remove the `/opt/backups` volume line in `compose.yaml`'s `gateway`
+service, set `HERMES_CRON_BACKUP_DEST=/opt/data/backups`, leave
+`HERMES_CRON_BACKUP_NFS_MOUNT` unset, and `./deploy.sh`.
 
 ---
 
