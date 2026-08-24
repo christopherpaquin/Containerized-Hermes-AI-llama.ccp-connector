@@ -18,6 +18,7 @@ provider is required, configured, or used as a fallback.
 - [🚀 Installation](#-installation)
 - [💬 Usage](#-usage)
 - [⚙️ Configuration](#️-configuration)
+- [🧠 MemPalace memory provider](#-mempalace-memory-provider)
 - [🏥 Health check](#-health-check)
 - [📊 Status](#-status)
 - [📜 Logs](#-logs)
@@ -265,6 +266,26 @@ model:
   base_url: http://127.0.0.1:8080/v1
   api_key: none
 ```
+
+---
+
+## 🧠 MemPalace memory provider
+
+`mempalace-remote` is an optional Hermes `MemoryProvider` plugin that makes
+a centralized, remote [MemPalace](http://10.1.10.17:8765/mcp) instance
+Hermes's automatic memory: relevant past context is recalled before each
+turn and useful exchanges are persisted back after each turn, with no
+"use MemPalace to..." prompting required. It reuses whichever MemPalace
+`mcp_servers` entry is already configured in `config.yaml` for URL and
+Bearer auth — no separate credential, no local database.
+
+```bash
+./mempalace-provider-install.sh              # install (idempotent, auto-rollback on failure)
+./mempalace-provider-install.sh --uninstall   # remove
+```
+
+Full design, lifecycle mapping, and troubleshooting:
+[`docs/mempalace-memory-provider.md`](docs/mempalace-memory-provider.md).
 
 ---
 

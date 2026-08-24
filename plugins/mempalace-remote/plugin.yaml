@@ -1,0 +1,10 @@
+name: mempalace-remote
+version: 1.0.0
+description: "MemPalace — centralized remote long-term memory (semantic search, drawers, knowledge graph, diary) reached over MCP. Automatic recall + persistence; direct MemPalace tools stay available separately."
+pip_dependencies:
+  - "mcp>=1.6.0"
+requires_env: []
+hooks:
+  - on_memory_write
+  - on_session_end
+  - on_session_switch
