@@ -70,13 +70,32 @@ chmod 700 "$DEST"
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 archive="${DEST}/hermes-backup-${timestamp}.tar.gz"
 
-# Exclude: home/.cache and lazy-packages (regenerable caches), and the
-# destination directory itself (avoid tarring the backups into the backup).
+# Exclude: home/.cache and lazy-packages (regenerable caches), the
+# destination directory itself (avoid tarring the backups into the backup),
+# and gateway.pid/gateway.lock (live runtime state the running gateway
+# constantly rewrites -- not backup data, and tar would flag them as
+# "changed as we read" on every run).
+#
+# tar exits 1 for "some files differed" (e.g. a live file like a *.db-wal
+# changed mid-read) -- expected noise when archiving a running process's
+# data dir, not a real failure. Only treat exit >=2 (a genuine tar error)
+# as fatal.
+set +e
 tar czf "$archive" \
 	--exclude="home/.cache" \
 	--exclude="lazy-packages" \
 	--exclude="$(basename "$DEST")" \
+	--exclude="gateway.pid" \
+	--exclude="gateway.lock" \
 	-C "$SRC" .
+tar_rc=$?
+set -e
+if ((tar_rc >= 2)); then
+	echo "tar failed with exit code ${tar_rc} (fatal)" >&2
+	exit "$tar_rc"
+elif ((tar_rc == 1)); then
+	echo "Note: tar reported some files changed during archiving (exit 1) -- expected for a live data dir, continuing." >&2
+fi
 chmod 600 "$archive"
 
 size="$(du -h "$archive" | cut -f1)"
