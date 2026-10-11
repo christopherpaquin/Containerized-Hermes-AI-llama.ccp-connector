@@ -72,7 +72,7 @@ main() {
 		if [[ -n "${HERMES_DASHBOARD_BASIC_AUTH_USERNAME}" && -n "${HERMES_DASHBOARD_BASIC_AUTH_PASSWORD}" ]]; then
 			dash_auth=(-u "${HERMES_DASHBOARD_BASIC_AUTH_USERNAME}:${HERMES_DASHBOARD_BASIC_AUTH_PASSWORD}")
 		fi
-		gw_view="$(curl -s --max-time 3 "${dash_auth[@]}" "http://$(dashboard_probe_host)/${HERMES_DASHBOARD_PORT}/api/status" 2>/dev/null \
+		gw_view="$(curl -s --max-time 3 "${dash_auth[@]}" "http://$(dashboard_probe_host):${HERMES_DASHBOARD_PORT}/api/status" 2>/dev/null \
 			| jq -r '.gateway_running // "unavailable"' 2>/dev/null || echo 'unavailable')"
 	fi
 	status_line "Gateway (per dashboard)" "$gw_view"
