@@ -13,7 +13,7 @@ name: hermes
 
 services:
   gateway:
-    image: ${HERMES_IMAGE:-nousresearch/hermes-agent}:${HERMES_IMAGE_TAG:-v2026.8.13}
+    image: ${HERMES_IMAGE:-nousresearch/hermes-agent}:${HERMES_IMAGE_TAG:-v0.21.6}
     container_name: hermes
     restart: unless-stopped
     # llama.cpp already listens on 127.0.0.1:8080 on this host; host
@@ -57,7 +57,7 @@ services:
     command: ["gateway", "run"]
 
   dashboard:
-    image: ${HERMES_IMAGE:-nousresearch/hermes-agent}:${HERMES_IMAGE_TAG:-v2026.8.13}
+    image: ${HERMES_IMAGE:-nousresearch/hermes-agent}:${HERMES_IMAGE_TAG:-v0.21.6}
     container_name: hermes-dashboard
     restart: unless-stopped
     network_mode: host

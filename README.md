@@ -258,7 +258,7 @@ Edit `.env` (copied from `.env.example` on first run) to change:
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `HERMES_IMAGE` / `HERMES_IMAGE_TAG` | Published image + pinned version tag | `nousresearch/hermes-agent` / `v2026.8.13` |
+| `HERMES_IMAGE` / `HERMES_IMAGE_TAG` | Published image + pinned version tag | `nousresearch/hermes-agent` / `v0.21.6` |
 | `HERMES_UID` / `HERMES_GID` | Host user Hermes runs as (auto-set by deploy.sh) | `id -u` / `id -g` |
 | `LLAMACPP_BASE_URL` | llama.cpp's OpenAI-compatible endpoint | `http://127.0.0.1:8080/v1` |
 | `HERMES_MODEL` | Pin a specific model id when llama.cpp serves more than one | auto-detected |

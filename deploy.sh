@@ -214,7 +214,7 @@ start_containers() {
 }
 
 wait_for_port() {
-	local host="$1" port="$2" label="$3" attempts=30
+	local host="$1" port="$2" label="$3" attempts=60
 	while ((attempts > 0)); do
 		if tcp_reachable "$host" "$port" 1; then
 			return 0
@@ -227,7 +227,7 @@ wait_for_port() {
 }
 
 wait_for_config_seed() {
-	local attempts=30
+	local attempts=60
 	while ((attempts > 0)); do
 		if docker exec hermes test -f /opt/data/config.yaml 2>/dev/null; then
 			return 0
@@ -292,11 +292,14 @@ configure_slack() {
 	fi
 
 	local hermes_env="${HERMES_DATA_DIR}/.env"
-	local current_bot_token current_allowed_users
-	current_bot_token="$(hermes_exec hermes config get SLACK_BOT_TOKEN 2>/dev/null || true)"
+	local current_bot_token current_app_token current_allowed_users
+	current_bot_token="$(grep -E '^SLACK_BOT_TOKEN=' "$hermes_env" 2>/dev/null | cut -d= -f2- || true)"
+	current_app_token="$(grep -E '^SLACK_APP_TOKEN=' "$hermes_env" 2>/dev/null | cut -d= -f2- || true)"
 	current_allowed_users="$(grep -E '^SLACK_ALLOWED_USERS=' "$hermes_env" 2>/dev/null | cut -d= -f2- || true)"
 
-	if [[ "$current_bot_token" == "$SLACK_BOT_TOKEN" && "$current_allowed_users" == "$SLACK_ALLOWED_USERS" ]]; then
+	if [[ "$current_bot_token" == "$SLACK_BOT_TOKEN" &&
+		"$current_app_token" == "$SLACK_APP_TOKEN" &&
+		"$current_allowed_users" == "$SLACK_ALLOWED_USERS" ]]; then
 		ok "Slack already configured with the current tokens; skipping."
 		return 0
 	fi

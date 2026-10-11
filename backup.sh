@@ -42,10 +42,21 @@ main() {
 	# home/.cache and lazy-packages are pure, regenerable caches (npm/pip
 	# downloads, on-demand Python deps for optional features) -- excluding
 	# them keeps the backup to real state instead of ~500MB of cache.
+	set +e
 	tar czf "$archive" \
 		--exclude='.hermes/home/.cache' \
 		--exclude='.hermes/lazy-packages' \
+		--exclude='.hermes/gateway.pid' \
+		--exclude='.hermes/gateway.lock' \
 		-C "$HOME" .hermes
+	local tar_rc=$?
+	set -e
+	if ((tar_rc >= 2)); then
+		error "tar failed with exit code ${tar_rc} (fatal)"
+		exit "$tar_rc"
+	elif ((tar_rc == 1)); then
+		info "Note: tar reported some files changed during archiving (exit 1) -- expected for a live data dir, continuing."
+	fi
 	chmod 600 "$archive"
 	ok "Backup created: ${archive} ($(du -h "$archive" | cut -f1))"
 
