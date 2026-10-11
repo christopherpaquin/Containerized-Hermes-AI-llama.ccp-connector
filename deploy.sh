@@ -320,6 +320,56 @@ configure_slack() {
 	ok "Gateway restarted."
 }
 
+configure_mobile_bridge() {
+	step "Ensuring the Mobile Bridge (Hermes Console companion, port ${HERMES_BRIDGE_PORT})"
+
+	# Clear stale 'failed' unit state left by earlier xP3ta setup rollbacks
+	# (e.g. a previous run that installed the bridge then rolled back).
+	# No-op for units that don't exist.
+	systemctl --user reset-failed hermes-gateway hermes-dashboard hermes-bridge 2>/dev/null || true
+
+	# The xP3ta hermes-setup installer is the source of truth for the
+	# Mobile Bridge: it verifies the bridge release, installs it as a
+	# hidden persistent user service, and re-prints the pairing QR. It is
+	# designed to be re-run (fresh install, repair, or Bridge update) and
+	# -- because the containerized gateway and dashboard are healthy here
+	# -- accepts them instead of taking them over; it only manages the
+	# bridge. See https://github.com/xP3ta/hermes-setup.
+	local installer rc
+	installer="$(mktemp)"
+	if ! curl -fsSL "https://raw.githubusercontent.com/xP3ta/hermes-setup/main/hermes-mobile-setup.sh" -o "$installer"; then
+		rm -f "$installer"
+		error "Could not download the Mobile Bridge installer."
+		exit 1
+	fi
+
+	rc=0
+	(
+		# Pass this deployment's dashboard credentials (and the API server
+		# key) through in case the installer resolves them from its own
+		# environment rather than HERMES_HOME.
+		set -a
+		[[ -n "${HERMES_DASHBOARD_BASIC_AUTH_USERNAME:-}" ]] && export HERMES_DASHBOARD_BASIC_AUTH_USERNAME
+		[[ -n "${HERMES_DASHBOARD_BASIC_AUTH_PASSWORD:-}" ]] && export HERMES_DASHBOARD_BASIC_AUTH_PASSWORD
+		[[ -n "${HERMES_DASHBOARD_BASIC_AUTH_SECRET:-}" ]] && export HERMES_DASHBOARD_BASIC_AUTH_SECRET
+		[[ -n "${API_SERVER_KEY:-}" ]] && export API_SERVER_KEY
+		set +a
+		sh "$installer"
+	) || rc=$?
+	rm -f "$installer"
+	if [[ $rc -ne 0 ]]; then
+		error "Mobile Bridge setup failed (installer exit ${rc})."
+		error "The gateway/dashboard deployment is intact; re-run ./deploy.sh to repair the bridge."
+		exit 1
+	fi
+
+	# The installer probes the bridge, but confirm it for the deploy
+	# summary regardless -- a bridge that dies after the probe would
+	# otherwise slip past silently.
+	wait_for_port "127.0.0.1" "$HERMES_BRIDGE_PORT" "Mobile Bridge"
+	ok "Mobile Bridge is listening on port ${HERMES_BRIDGE_PORT}"
+}
+
 print_summary() {
 	local provider base_url model
 	provider="$(hermes_exec hermes config get model.provider 2>/dev/null || echo unknown)"
@@ -338,6 +388,11 @@ print_summary() {
 	printf 'llama.cpp endpoint: %s\n' "$base_url"
 	printf 'Model:              %s\n' "$model"
 	printf 'Persistent data:    %s\n' "$HERMES_DATA_DIR"
+	if tcp_reachable "127.0.0.1" "$HERMES_BRIDGE_PORT" 1 2>/dev/null; then
+		printf 'Mobile Bridge:      running (port %s -- Hermes Console companion)\n' "$HERMES_BRIDGE_PORT"
+	else
+		printf 'Mobile Bridge:      NOT RUNNING (port %s)\n' "$HERMES_BRIDGE_PORT"
+	fi
 	printf '\n'
 }
 
@@ -364,6 +419,8 @@ main() {
 		print_summary
 		exit 1
 	fi
+
+	configure_mobile_bridge
 
 	print_summary
 }

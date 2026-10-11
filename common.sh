@@ -58,6 +58,10 @@ load_env() {
 	API_SERVER_HOST="${API_SERVER_HOST:-127.0.0.1}"
 	API_SERVER_PORT="${API_SERVER_PORT:-8642}"
 	API_SERVER_KEY="${API_SERVER_KEY:-}"
+	# Mobile Bridge (Hermes Console companion service, installed by the
+	# xP3ta hermes-setup installer as a host user service -- not a
+	# container; see deploy.sh configure_mobile_bridge).
+	HERMES_BRIDGE_PORT="${HERMES_BRIDGE_PORT:-9131}"
 	SLACK_BOT_TOKEN="${SLACK_BOT_TOKEN:-}"
 	SLACK_APP_TOKEN="${SLACK_APP_TOKEN:-}"
 	SLACK_ALLOWED_USERS="${SLACK_ALLOWED_USERS:-}"

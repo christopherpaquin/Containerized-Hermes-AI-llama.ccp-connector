@@ -63,6 +63,13 @@ services:
     network_mode: host
     depends_on:
       - gateway
+    # The dashboard verifies the gateway is alive by checking the gateway's
+    # PID from gateway_state.json against the process table. The gateway
+    # runs in its own container, so the dashboard must share that PID
+    # namespace -- without this, /api/status (and the Profiles page, and
+    # the xP3ta hermes-setup Mobile Bridge installer's health check)
+    # permanently report gateway_running=false.
+    pid: "service:gateway"
     volumes:
       - ~/.hermes:/opt/data
     environment:

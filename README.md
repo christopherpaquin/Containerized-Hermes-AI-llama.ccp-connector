@@ -87,6 +87,24 @@ their persistent state directory. This mirrors
 `nousresearch/hermes-agent` image. llama.cpp is not containerized here — it
 already exists and is managed independently.
 
+Two non-obvious dependencies, both discovered the hard way:
+
+- **The dashboard container shares the gateway's PID namespace**
+  (`pid: "service:gateway"`). The dashboard's liveness check (its
+  `/api/status` `gateway_running` field, the Profiles page, and the
+  xP3ta Mobile Bridge installer's health check) validates the gateway's
+  PID from `gateway_state.json` against the process table. With the
+  default *private* PID namespace the dashboard can never see the
+  gateway's PID and reports `gateway_running: false` permanently.
+- **The Mobile Bridge is not a container.** The Hermes Console mobile
+  app's companion service (port `9131`) is a hidden persistent *host
+  user service* managed by the
+  [xP3ta hermes-setup installer](https://github.com/xP3ta/hermes-setup),
+  which `deploy.sh` runs (idempotently) at the end of every deploy. It
+  accepts the containerized gateway and dashboard when they are healthy
+  and only installs/updates the bridge; on a fresh install it prints
+  the app's pairing QR.
+
 ---
 
 ## 📦 Requirements
@@ -342,7 +360,9 @@ then:
 
 `~/.hermes` is untouched by an upgrade. Hermes runs non-interactive
 config-schema migrations against the mounted `config.yaml` on container
-start, backing it up first if a migration is needed.
+start, backing it up first if a migration is needed. The Mobile Bridge
+is re-verified (and updated, if a new release is available) by the same
+run — a failing bridge does not roll back the containers.
 
 ---
 

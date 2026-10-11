@@ -55,6 +55,27 @@ main() {
 		api_status="enabled -- http://${API_SERVER_HOST}:${API_SERVER_PORT}/v1"
 	fi
 	status_line "Gateway API server" "$api_status"
+
+	local bridge_status="not running"
+	if tcp_reachable "127.0.0.1" "$HERMES_BRIDGE_PORT" 1 2>/dev/null; then
+		bridge_status="running (port ${HERMES_BRIDGE_PORT} -- Hermes Console companion)"
+	fi
+	status_line "Mobile Bridge" "$bridge_status"
+
+	# The dashboard's own view of the gateway -- the exact signal the
+	# xP3ta Mobile Bridge installer depends on. If this says 'stopped'
+	# while the container is running, the dashboard container is not
+	# sharing the gateway's PID namespace (see compose.yaml).
+	local gw_view="n/a (dashboard not running)"
+	if dashboard_running; then
+		local dash_auth=()
+		if [[ -n "${HERMES_DASHBOARD_BASIC_AUTH_USERNAME}" && -n "${HERMES_DASHBOARD_BASIC_AUTH_PASSWORD}" ]]; then
+			dash_auth=(-u "${HERMES_DASHBOARD_BASIC_AUTH_USERNAME}:${HERMES_DASHBOARD_BASIC_AUTH_PASSWORD}")
+		fi
+		gw_view="$(curl -s --max-time 3 "${dash_auth[@]}" "http://$(dashboard_probe_host)/${HERMES_DASHBOARD_PORT}/api/status" 2>/dev/null \
+			| jq -r '.gateway_running // "unavailable"' 2>/dev/null || echo 'unavailable')"
+	fi
+	status_line "Gateway (per dashboard)" "$gw_view"
 	status_line "Image" "$image"
 	status_line "llama.cpp" "${llama_status} (${LLAMACPP_BASE_URL})"
 	if [[ -n "$ctx" ]]; then
